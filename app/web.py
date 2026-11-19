@@ -3,9 +3,11 @@ from app import store
 from app.pipeline import run
 from app.config import TITLE,MODULES,STAGES,COLUMNS,SAMPLES,DEFAULTS
 def view(stage):
-    if not 1<=stage<=7: return "页面不存在",404
+    if not 1<=stage<=8: return "页面不存在",404
     run_id=request.args.get("run")
     result=store.fetch(run_id) if run_id else run()
+    if stage>len(result["stages"]):
+        result=run(stop=stage,persist=False)
     sample=(SAMPLES/"dirty.csv").read_text(encoding="utf-8-sig")
     data=result["stages"][stage-1]
     return render_template(f"m{stage}.html",title=TITLE,modules=MODULES,stage=stage,result=result,data=data,

@@ -22,15 +22,40 @@ def test_real_three_stations(raw):
     assert len(run(raw,stop=4,persist=False)['loss_balances'])==3
 
 def test_real_loss_conserved(raw):
-    x=run(raw,stop=4,persist=False);assert sum(D(r['loss_kwh']) for r in x['orders'])==sum(D(r['loss_kwh']) for r in x['loss_balances'])
+    # 被拦截站点不强制分摊损耗（份额为 0）；通过站点的订单份额之和等于其站级损耗
+    x=run(raw,stop=4,persist=False)
+    for balance in x['loss_balances']:
+        if balance['state']!='通过':
+            assert all(D(r['loss_kwh'])==0 for r in x['orders'] if r['station']==balance['station'])
+            continue
+        share=sum((D(r['loss_kwh']) for r in x['orders'] if r['station']==balance['station']),D(0))
+        assert share==D(balance['loss_kwh'])
 
-def test_clean_sample_has_covered_station_meters():
+def test_clean_sample_daily_blocked_when_negative_daily_loss():
+    # 按日口径：整站净量为正，但某一本地日订单超过当日总表份额，该站标记待复核且不分摊
     from app.config import SAMPLES
     result=run((SAMPLES/'clean.csv').read_bytes(),stop=4,persist=False)
     assert result['input_count']==43 and not result['quarantine']
     assert len(result['loss_balances'])==3
-    assert all(r['state']=='通过' for r in result['loss_balances'])
+    blocked=[b for b in result['loss_balances'] if b['state']!='通过']
+    assert {b['station'] for b in blocked}=={'站乙','站丙'}
+    daily=run((SAMPLES/'clean.csv').read_bytes(),stop=8,persist=False)['daily']
+    assert any(d['state']=='订单电量超过总表' for d in daily)
 
+def test_directional_loss_split():
+    # 充电 40、放电 10、总表 36 → 损耗 6，分向 4.8 / 1.2，放电单不承担充电侧损耗
+    rows=[dict(id='C1',station='S',kind='order',energy=D('30'),direction='charge',order='C1',
+               start=instant('2026-11-16T00:00:00Z'),end=instant('2026-11-17T00:00:00Z')),
+          dict(id='C2',station='S',kind='order',energy=D('10'),direction='charge',order='C2',
+               start=instant('2026-11-16T00:00:00Z'),end=instant('2026-11-17T00:00:00Z')),
+          dict(id='D1',station='S',kind='order',energy=D('10'),direction='discharge',order='D1',
+               start=instant('2026-11-16T00:00:00Z'),end=instant('2026-11-17T00:00:00Z')),
+          rec('M','station','36')]
+    assigned,balances=allocate(rows)
+    b=balances[0]
+    assert b['charge_loss_kwh']==D('4.8') and b['discharge_loss_kwh']==D('1.2')
+    by={r['order']:r for r in assigned}
+    assert by['D1']['loss_kwh']==D('1.2')
 
 def test_meter_must_cover_order_interval():
     order=rec('1','order','10');meter=rec('2','station','11')

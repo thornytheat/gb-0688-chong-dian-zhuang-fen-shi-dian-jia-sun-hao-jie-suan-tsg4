@@ -31,6 +31,10 @@ def normalize(row,max_hours):
     if out['energy']<0 or out['bill']<0 or v<1 or v!=v.to_integral():raise DomainError('RANGE','电量金额或版本无效')
     out['version']=int(v)
     if row['kind'] not in ('order','station'):raise DomainError('STATE','读数类型无效')
+    direction=(row.get('direction') or 'charge').strip() or 'charge'
+    if direction not in ('charge','discharge'):raise DomainError('STATE','充放方向无效')
+    if row['kind']=='station':direction='charge'
+    out['direction']=direction
     if row['kind']=='order' and not row['order']:raise DomainError('MISSING','订单号缺失')
     return out
 def dedup(rows):
@@ -39,7 +43,7 @@ def dedup(rows):
     good=[];bad=[]
     for key,group in sorted(groups.items()):
         latest=max(r['version'] for r in group);candidates=[r for r in group if r['version']==latest]
-        sig=lambda r:tuple(str(r[k]) for k in ['station','order','start','end','energy','bill','kind'])
+        sig=lambda r:tuple(str(r[k]) for k in ['station','order','start','end','energy','bill','kind','direction'])
         if len({sig(r) for r in candidates})>1:bad.extend(rejected(r,'CONFLICT','同版计量冲突') for r in group);continue
         chosen=min(candidates,key=lambda r:r['_line']);good.append(chosen);bad.extend(rejected(r,'DUPLICATE','重复或旧版') for r in group if r is not chosen)
     return good,bad

@@ -13,7 +13,7 @@ def split(row,rates):
         boundary=datetime.combine(local.date(),datetime.min.time(),ZONE)+timedelta(hours=b)
         stop=min(end,boundary);fraction=D(str((stop-cursor).total_seconds()))/seconds
         kwh=row['energy']*fraction
-        result.append({'id':row['id'],'station':row['station'],'order':row['order'],'start':cursor,'end':stop,'kwh':kwh,'rate':rate,'fee':kwh*rate})
+        result.append({'id':row['id'],'station':row['station'],'order':row['order'],'start':cursor,'end':stop,'kwh':kwh,'rate':rate,'fee':kwh*rate,'direction':row.get('direction','charge')})
         cursor=stop
     # Keep measured energy exact after non-terminating Decimal divisions.
     if result:

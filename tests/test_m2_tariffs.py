@@ -33,3 +33,18 @@ def test_real_conflict(raw):
 def test_real_unit(raw):
     assert all(x['unit']=='kWh' for x in run(raw,stop=2,persist=False)['records'])
 
+def test_direction_defaults_and_validation():
+    assert normalize(row(),D(72))['direction']=='charge'
+    assert normalize(row(direction='discharge'),D(72))['direction']=='discharge'
+    assert normalize(row(direction=''),D(72))['direction']=='charge'
+    with pytest.raises(DomainError):normalize(row(direction='sideways'),D(72))
+
+def test_station_direction_forced_charge():
+    meter=row(kind='station',order='',direction='discharge')
+    assert normalize(meter,D(72))['direction']=='charge'
+
+def test_direction_participates_in_conflict_signature():
+    a=normalize(row(direction='charge'),D(72));b=normalize(row(direction='discharge'),D(72))
+    good,bad=dedup([a,b])
+    assert not good and all(x['code']=='CONFLICT' for x in bad)
+
